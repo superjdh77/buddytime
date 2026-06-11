@@ -1,0 +1,276 @@
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { db } from '../firebase'
+import { ref, onValue, update } from 'firebase/database'
+import { getProfile, saveRoundToHistory } from '../utils/auth'
+import { getScoreLabel } from '../data/courses'
+import Celebration from '../components/Celebration'
+
+export default function LiveScore() {
+  const { roundId } = useParams()
+  const navigate = useNavigate()
+  const profile = getProfile()
+  const [round, setRound] = useState(null)
+  const [currentHole, setCurrentHole] = useState(0)
+  const [celebration, setCelebration] = useState(null)
+  const [note, setNote] = useState('')
+  const [showNoteInput, setShowNoteInput] = useState(false)
+  const prevScoresRef = { current: {} }
+
+  useEffect(() => {
+    return onValue(ref(db, `rounds/${roundId}`), snap => {
+      if (!snap.exists()) { navigate('/'); return }
+      const data = snap.val()
+
+      // 버디/이글 감지
+      if (data.scores) {
+        Object.entries(data.scores).forEach(([holeIdx, s]) => {
+          const key = `hole_${holeIdx}`
+          const par = data.holePars?.[parseInt(holeIdx)] ?? 4
+          const diff = (s.strokes || 0) - par
+          if (!prevScoresRef.current[key] && s.strokes > 0 && diff <= -1) {
+            setCelebration({ diff, label: diff <= -2 ? '이글🦅' : '버디🐦' })
+            setTimeout(() => setCelebration(null), 2500)
+          }
+          prevScoresRef.current[key] = s.strokes
+        })
+      }
+      setRound(data)
+      setNote(data.note || '')
+    })
+  }, [roundId])
+
+  if (!round) return (
+    <div className="flex items-center justify-center min-h-screen bg-[#0D1B3E]">
+      <div className="text-4xl animate-spin">⛳</div>
+    </div>
+  )
+
+  // 내 라운드인지 확인
+  if (round.playerName !== profile?.name) {
+    navigate(`/watch/${roundId}`)
+    return null
+  }
+
+  const par = round.holePars?.[currentHole] ?? 4
+  const score = round.scores?.[currentHole] || { strokes: 0, putts: 0 }
+  const diff = score.strokes > 0 ? score.strokes - par : null
+  const label = diff !== null ? getScoreLabel(diff) : null
+  const holesPlayed = Object.values(round.scores || {}).filter(s => s.strokes > 0).length
+
+  // 총계
+  let totalStrokes = 0, totalPar = 0
+  Object.entries(round.scores || {}).forEach(([i, s]) => {
+    if (s.strokes > 0) { totalStrokes += s.strokes; totalPar += round.holePars?.[i] ?? 4 }
+  })
+  const totalDiff = totalStrokes > 0 ? totalStrokes - totalPar : null
+
+  async function setScore(field, delta) {
+    const cur = score[field] || 0
+    const min = field === 'strokes' ? 1 : 0
+    const newVal = Math.max(min, cur + delta)
+    await update(ref(db), {
+      [`rounds/${roundId}/scores/${currentHole}/${field}`]: newVal,
+      [`rounds/${roundId}/currentHole`]: currentHole,
+    })
+  }
+
+  async function finishRound() {
+    if (!confirm('라운드를 종료하고 저장하시겠습니까?')) return
+    const now = Date.now()
+
+    // 버디/이글 수 계산
+    let birdies = 0, eagles = 0
+    Object.entries(round.scores || {}).forEach(([i, s]) => {
+      const d = (s.strokes || 0) - (round.holePars?.[i] ?? 4)
+      if (d === -1) birdies++
+      if (d <= -2) eagles++
+    })
+
+    await update(ref(db, `rounds/${roundId}`), {
+      isLive: false,
+      finishedAt: now,
+      note,
+      birdies,
+      eagles,
+      totalStrokes,
+      totalPar,
+    })
+    saveRoundToHistory({ ...round, isLive: false, finishedAt: now, birdies, eagles, totalStrokes, totalPar, note })
+    navigate('/rounds')
+  }
+
+  function shareLink() {
+    const url = `${window.location.origin}/watch/${roundId}`
+    const msg = `⛳ ${profile.name}님이 ${round.courseName} 라운드 중!\n실시간 구경하기 👉\n${url}`
+    if (navigator.share) navigator.share({ text: msg })
+    else { navigator.clipboard?.writeText(msg); alert('링크가 복사되었습니다!\n카카오로 친구들에게 보내세요 😊') }
+  }
+
+  // 리액션 집계
+  const reactionCounts = {}
+  if (round.reactions) {
+    Object.values(round.reactions).forEach(emojiMap => {
+      Object.entries(emojiMap || {}).forEach(([emoji, names]) => {
+        reactionCounts[emoji] = (reactionCounts[emoji] || 0) + Object.keys(names || {}).length
+      })
+    })
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen bg-[#0D1B3E]">
+      {/* 헤더 */}
+      <div className="bg-[#162449] px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-red-400 text-xs font-bold">LIVE</span>
+              <span className="text-gray-400 text-xs">· {round.courseName}</span>
+            </div>
+            <p className="text-white font-bold text-sm">{holesPlayed}/{round.totalHoles}홀 완료</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={shareLink}
+              className="bg-[#E8B84B] text-[#0D1B3E] text-xs font-bold px-3 py-1.5 rounded-lg">
+              📤 공유
+            </button>
+            <button onClick={finishRound}
+              className="bg-red-900/40 text-red-400 text-xs px-3 py-1.5 rounded-lg">
+              종료
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 합계 바 */}
+      {totalDiff !== null && (
+        <div className="bg-[#0D1B3E] px-4 py-2 flex items-center justify-between border-b border-[#162449]">
+          <span className="text-gray-400 text-xs">현재 합계</span>
+          <span className={`font-black text-lg ${
+            totalDiff < 0 ? 'text-[#E8B84B]' : totalDiff === 0 ? 'text-white' : 'text-red-400'
+          }`}>
+            {totalDiff === 0 ? 'EVEN' : totalDiff > 0 ? `+${totalDiff}` : totalDiff}
+          </span>
+          <span className="text-gray-400 text-xs">{totalStrokes}타</span>
+        </div>
+      )}
+
+      {/* 홀 네비게이션 */}
+      <div className="px-4 py-3 bg-[#162449]/40">
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => setCurrentHole(Math.max(0, currentHole - 1))}
+            disabled={currentHole === 0}
+            className="w-10 h-10 rounded-xl bg-[#162449] text-white text-2xl flex items-center justify-center disabled:opacity-30">‹</button>
+          <div className="text-center">
+            <p className="text-white font-black text-3xl">{currentHole + 1}번 홀</p>
+            <p className="text-[#4A9FE0] font-bold">Par {par}</p>
+          </div>
+          <button onClick={() => setCurrentHole(Math.min(round.totalHoles - 1, currentHole + 1))}
+            disabled={currentHole === round.totalHoles - 1}
+            className="w-10 h-10 rounded-xl bg-[#162449] text-white text-2xl flex items-center justify-center disabled:opacity-30">›</button>
+        </div>
+
+        {/* 홀 도트 */}
+        <div className="flex gap-1 justify-center flex-wrap">
+          {Array.from({ length: round.totalHoles }, (_, i) => {
+            const done = (round.scores?.[i]?.strokes || 0) > 0
+            return (
+              <button key={i} onClick={() => setCurrentHole(i)}
+                className={`w-6 h-6 rounded-full text-xs font-bold transition-all
+                  ${i === currentHole ? 'bg-[#4A9FE0] text-white scale-110' :
+                    done ? 'bg-[#4A9FE0]/30 text-[#4A9FE0]' : 'bg-[#162449] text-gray-500'}`}>
+                {i + 1}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* 스코어 입력 */}
+      <div className="flex-1 px-4 py-4 space-y-3">
+        {/* 타수 */}
+        <div className="bg-[#162449] rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-gray-300 text-sm font-bold">총 타수</p>
+            {label && score.strokes > 0 && (
+              <span className="text-sm font-black px-3 py-1 rounded-full"
+                style={{ color: label.color, backgroundColor: label.color + '22' }}>
+                {label.emoji} {label.label}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <button onClick={() => setScore('strokes', -1)}
+              className="w-14 h-14 rounded-2xl bg-[#0D1B3E] text-white font-black text-2xl flex items-center justify-center active:scale-90">−</button>
+            <span className="font-black text-6xl" style={{ color: label?.color || 'white' }}>
+              {score.strokes || '—'}
+            </span>
+            <button onClick={() => setScore('strokes', 1)}
+              className="w-14 h-14 rounded-2xl bg-[#4A9FE0] text-white font-black text-2xl flex items-center justify-center active:scale-90">+</button>
+          </div>
+        </div>
+
+        {/* 퍼팅 */}
+        <div className="bg-[#162449] rounded-2xl p-4">
+          <p className="text-[#60A5FA] text-sm font-bold mb-2">🔵 퍼팅 수</p>
+          <div className="flex items-center justify-between">
+            <button onClick={() => setScore('putts', -1)}
+              className="w-14 h-14 rounded-2xl bg-[#0D1B3E] text-white font-black text-2xl flex items-center justify-center active:scale-90">−</button>
+            <span className="text-[#60A5FA] font-black text-6xl">
+              {score.putts || '—'}
+            </span>
+            <button onClick={() => setScore('putts', 1)}
+              className="w-14 h-14 rounded-2xl bg-blue-700 text-white font-black text-2xl flex items-center justify-center active:scale-90">+</button>
+          </div>
+        </div>
+
+        {/* 리액션 (친구들이 보낸 것) */}
+        {Object.keys(reactionCounts).length > 0 && (
+          <div className="bg-[#162449] rounded-xl px-4 py-3">
+            <p className="text-gray-400 text-xs mb-2">💬 친구들의 반응</p>
+            <div className="flex gap-3 flex-wrap">
+              {Object.entries(reactionCounts).map(([emoji, count]) => (
+                <span key={emoji} className="bg-[#0D1B3E] rounded-full px-3 py-1.5 text-sm">
+                  {emoji} <span className="text-white font-bold">{count}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 한 줄 메모 */}
+        {showNoteInput ? (
+          <div className="bg-[#162449] rounded-xl p-3">
+            <input
+              type="text"
+              placeholder='오늘 라운드 한 마디 (예: "드라이버 최고")'
+              maxLength={50}
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              onBlur={() => update(ref(db, `rounds/${roundId}`), { note })}
+              className="w-full bg-[#0D1B3E] text-white rounded-lg px-3 py-2 text-sm outline-none"
+            />
+          </div>
+        ) : (
+          <button onClick={() => setShowNoteInput(true)}
+            className="w-full border border-dashed border-gray-600 text-gray-500 py-2.5 rounded-xl text-sm">
+            ✏️ 오늘 라운드 한 마디 남기기
+          </button>
+        )}
+      </div>
+
+      {/* 다음 홀 */}
+      {currentHole < round.totalHoles - 1 && (
+        <div className="px-4 pb-4">
+          <button onClick={() => setCurrentHole(currentHole + 1)}
+            className="w-full bg-[#162449] text-[#4A9FE0] font-bold py-3 rounded-xl">
+            다음 홀 ({currentHole + 2}번) →
+          </button>
+        </div>
+      )}
+
+      {celebration && <Celebration data={celebration} />}
+    </div>
+  )
+}
