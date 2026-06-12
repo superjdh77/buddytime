@@ -7,6 +7,7 @@ import LiveScore from './pages/LiveScore'
 import WatchLive from './pages/WatchLive'
 import MyRounds from './pages/MyRounds'
 import GroupBoard from './pages/GroupBoard'
+import InstallPrompt from './components/InstallPrompt'
 
 function RequireAuth({ children }) {
   return getProfile() ? children : <Navigate to="/onboarding" replace />
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/group" element={<RequireAuth><GroupBoard /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      <InstallPrompt />
     </BrowserRouter>
   )
 }
