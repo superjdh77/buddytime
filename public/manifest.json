@@ -1,0 +1,19 @@
+{
+  "name": "버디타임 - 골프 생중계",
+  "short_name": "버디타임",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0D1B3E",
+  "theme_color": "#0D1B3E",
+  "lang": "ko",
+  "description": "골프 라운드 실시간 스코어 공유 앱",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
