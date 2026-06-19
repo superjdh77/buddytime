@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { db } from '../firebase'
 import { ref, onValue, update } from 'firebase/database'
-import { getProfile, saveRoundToHistory } from '../utils/auth'
+import { getProfile, saveRoundToHistory, clearActiveRound } from '../utils/auth'
 import { getScoreLabel } from '../data/courses'
 import Celebration from '../components/Celebration'
 
@@ -19,7 +19,7 @@ export default function LiveScore() {
 
   useEffect(() => {
     return onValue(ref(db, `rounds/${roundId}`), snap => {
-      if (!snap.exists()) { navigate('/'); return }
+      if (!snap.exists()) { clearActiveRound(); navigate('/'); return }
       const data = snap.val()
 
       // 버디/이글 감지
@@ -97,6 +97,7 @@ export default function LiveScore() {
       totalPar,
     })
     saveRoundToHistory({ ...round, isLive: false, finishedAt: now, birdies, eagles, totalStrokes, totalPar, note })
+    clearActiveRound()
     navigate('/rounds')
   }
 
