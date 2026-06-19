@@ -50,6 +50,9 @@ export default function Home() {
     return new Date(ts).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
   }
 
+  // 내가 진행 중인 라운드 (앱을 나갔다 들어와도 이어할 수 있도록 — Firebase 기준이라 기기를 바꿔도 됨)
+  const myLiveRound = liveRounds.find(r => r.playerName === profile?.name)
+
   function getScoreDiff(round) {
     if (!round.scores) return null
     let strokes = 0, par = 0
@@ -85,13 +88,23 @@ export default function Home() {
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
 
-        {/* 라운드 시작 버튼 */}
-        <button
-          onClick={() => navigate('/start')}
-          className="w-full bg-gradient-to-r from-[#4A9FE0] to-[#2563EB] text-white font-black py-5 rounded-2xl text-lg shadow-lg transition-all active:scale-95"
-        >
-          ⛳ 라운드 시작 · 생중계
-        </button>
+        {/* 진행 중인 내 라운드 이어하기 */}
+        {myLiveRound ? (
+          <button
+            onClick={() => navigate(`/live/${myLiveRound.id}`)}
+            className="w-full bg-gradient-to-r from-red-600 to-red-500 text-white font-black py-5 rounded-2xl text-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+          >
+            <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+            진행 중인 라운드 이어하기 ({myLiveRound.courseName})
+          </button>
+        ) : (
+          <button
+            onClick={() => navigate('/start')}
+            className="w-full bg-gradient-to-r from-[#4A9FE0] to-[#2563EB] text-white font-black py-5 rounded-2xl text-lg shadow-lg transition-all active:scale-95"
+          >
+            ⛳ 라운드 시작 · 생중계
+          </button>
+        )}
 
         {/* 지금 라이브 */}
         {liveRounds.length > 0 && (
@@ -104,10 +117,11 @@ export default function Home() {
               {liveRounds.map(round => {
                 const sd = getScoreDiff(round)
                 const holesPlayed = round.scores ? Object.keys(round.scores).length : 0
+                const isMine = round.playerName === profile?.name
                 return (
                   <div
                     key={round.id}
-                    onClick={() => navigate(`/watch/${round.id}`)}
+                    onClick={() => navigate(isMine ? `/live/${round.id}` : `/watch/${round.id}`)}
                     className="bg-[#162449] rounded-2xl p-4 cursor-pointer active:scale-98 transition-all border border-red-500/20"
                   >
                     <div className="flex items-center gap-3">
