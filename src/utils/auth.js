@@ -43,6 +43,21 @@ export function saveRoundToHistory(round) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 50)))
 }
 
+// 진행 중인 라운드 ID (앱 종료/재접속 시 이어하기용)
+const ACTIVE_ROUND_KEY = 'buddytime_active_round'
+
+export function setActiveRound(roundId) {
+  localStorage.setItem(ACTIVE_ROUND_KEY, roundId)
+}
+
+export function getActiveRound() {
+  return localStorage.getItem(ACTIVE_ROUND_KEY) || null
+}
+
+export function clearActiveRound() {
+  localStorage.removeItem(ACTIVE_ROUND_KEY)
+}
+
 // 8자리 고유 ID 생성
 export function generateId() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
