@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../firebase'
 import { ref, set } from 'firebase/database'
-import { getProfile, generateId, setActiveRound } from '../utils/auth'
+import { getProfile, generateId, setActiveRound, saveRoundBackup } from '../utils/auth'
 import { REGIONS } from '../data/courses'
 
 export default function StartRound() {
@@ -88,14 +88,15 @@ export default function StartRound() {
       reactions: {},
     }
 
-    try {
-      await set(ref(db, `rounds/${roundId}`), roundData)
-      setActiveRound(roundId)
-      navigate(`/live/${roundId}`)
-    } catch (e) {
-      alert('시작 실패: ' + e.message)
-      setStarting(false)
-    }
+    // 골프장은 신호가 약할 수 있어서 서버 저장을 기다리지 않고 바로 진행.
+    // 로컬 백업을 먼저 남겨두면 서버 전송이 늦거나 실패해도 이어하기가 가능함.
+    setActiveRound(roundId)
+    saveRoundBackup(roundData)
+    navigate(`/live/${roundId}`)
+
+    set(ref(db, `rounds/${roundId}`), roundData).catch(() => {
+      // 오프라인 등으로 실패해도 로컬 백업이 있으니 괜찮음 — 연결되면 LiveScore에서 재시도함
+    })
   }
 
   // ── 현재 단계 결정 ──
