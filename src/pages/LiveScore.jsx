@@ -238,27 +238,34 @@ export default function LiveScore() {
       <div className="px-4 pt-3">
         <div className="bg-[#162449] rounded-2xl p-4">
           <p className="text-white font-bold text-sm mb-3">전체 스코어카드</p>
-          <div className="overflow-x-auto">
-            <div className="flex gap-1 min-w-max">
-              {Array.from({ length: round.totalHoles }, (_, i) => {
-                const s = round.scores?.[i]
-                const p = round.holePars?.[i] ?? 4
-                const d = s?.strokes > 0 ? s.strokes - p : null
-                const color = d === null ? '#374151' :
-                  d <= -2 ? '#E8B84B' : d === -1 ? '#10B981' :
-                  d === 0 ? '#fff' : d === 1 ? '#F97316' : '#EF4444'
-                return (
-                  <button key={i} onClick={() => setCurrentHole(i)}
-                    className={`flex flex-col items-center rounded-lg px-1.5 py-1 min-w-[28px] transition-all
-                      ${i === currentHole ? 'bg-[#4A9FE0]/30 ring-1 ring-[#4A9FE0]' : ''}`}>
-                    <span className="text-gray-500 text-xs">{i+1}</span>
-                    <span className="font-bold text-sm" style={{ color }}>
-                      {s?.strokes || '·'}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+          <div className="space-y-2">
+            {[0, 9].map(start => {
+              const holesInRow = Math.min(9, round.totalHoles - start)
+              if (holesInRow <= 0) return null
+              return (
+                <div key={start} className="grid gap-1" style={{ gridTemplateColumns: `repeat(${holesInRow}, minmax(0, 1fr))` }}>
+                  {Array.from({ length: holesInRow }, (_, j) => {
+                    const i = start + j
+                    const s = round.scores?.[i]
+                    const p = round.holePars?.[i] ?? 4
+                    const d = s?.strokes > 0 ? s.strokes - p : null
+                    const color = d === null ? '#374151' :
+                      d <= -2 ? '#E8B84B' : d === -1 ? '#10B981' :
+                      d === 0 ? '#fff' : d === 1 ? '#F97316' : '#EF4444'
+                    return (
+                      <button key={i} onClick={() => setCurrentHole(i)}
+                        className={`flex flex-col items-center rounded-lg py-1 transition-all
+                          ${i === currentHole ? 'bg-[#4A9FE0]/30 ring-1 ring-[#4A9FE0]' : ''}`}>
+                        <span className="text-gray-500 text-xs">{i+1}</span>
+                        <span className="font-bold text-sm" style={{ color }}>
+                          {s?.strokes || '·'}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
