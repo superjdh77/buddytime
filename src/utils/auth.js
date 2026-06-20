@@ -1,5 +1,55 @@
-// 로컬 프로필 관리 (서버 인증 없음, 이름+PIN 방식)
+// 로컬 프로필 관리 (서버 인증 없음, 이메일+PIN 방식)
+import { db } from '../firebase'
+import { ref, get, set as fbSet } from 'firebase/database'
+
 const KEY = 'buddytime_profile'
+
+// 이메일을 RTDB 키로 쓸 수 있게 변환 (. # $ [ ] / 는 경로에 못 씀)
+export function emailKey(email) {
+  return email.trim().toLowerCase().replace(/[.#$\[\]\/]/g, '_')
+}
+
+const LAST_EMAIL_KEY = 'buddytime_last_email'
+
+export function getRememberedEmail() {
+  return localStorage.getItem(LAST_EMAIL_KEY) || ''
+}
+
+export function setRememberedEmail(email) {
+  localStorage.setItem(LAST_EMAIL_KEY, email.trim().toLowerCase())
+}
+
+// 이메일로 계정 조회 (가입 여부 확인)
+export async function findAccount(email) {
+  const snap = await get(ref(db, `users/${emailKey(email)}`))
+  return snap.exists() ? snap.val() : null
+}
+
+// 신규 가입: 이메일 키로 Firebase에 계정 생성
+export async function registerAccount({ email, pin, name, color }) {
+  const account = {
+    email: email.trim().toLowerCase(),
+    pin,
+    name: name.trim(),
+    color,
+    groups: [],
+    createdAt: Date.now(),
+  }
+  await fbSet(ref(db, `users/${emailKey(email)}`), account)
+  setRememberedEmail(email)
+  saveProfile(account)
+  return account
+}
+
+// 로그인: 이메일+PIN 확인 후 로컬 프로필 갱신 (기록은 이메일 기준으로 누적)
+export async function loginAccount(email, pin) {
+  const account = await findAccount(email)
+  if (!account) return { ok: false, reason: 'not_found' }
+  if (account.pin !== pin) return { ok: false, reason: 'wrong_pin' }
+  setRememberedEmail(email)
+  saveProfile(account)
+  return { ok: true, account }
+}
 
 export function getProfile() {
   try {
@@ -91,6 +141,27 @@ export function generateId() {
 
 // 그룹 코드 생성 (6자리)
 export function generateGroupCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+}
+
+// 로그인 후 원래 가려던 페이지로 돌려보내기 (방 링크로 들어왔는데 로그인이 안 된 경우 등)
+const REDIRECT_KEY = 'buddytime_redirect_after_login'
+
+export function setRedirectAfterLogin(path) {
+  localStorage.setItem(REDIRECT_KEY, path)
+}
+
+export function getRedirectAfterLogin() {
+  return localStorage.getItem(REDIRECT_KEY) || null
+}
+
+export function clearRedirectAfterLogin() {
+  localStorage.removeItem(REDIRECT_KEY)
+}
+
+// 방(룸) 코드 생성 (6자리) — 같이 라운드하는 사람들이 모이는 방
+export function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 }
