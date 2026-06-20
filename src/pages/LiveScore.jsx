@@ -13,10 +13,24 @@ export default function LiveScore() {
   // 로컬 백업이 있으면 그걸로 즉시 화면을 띄움 (오프라인이어도 바로 이어할 수 있게)
   const [round, setRound] = useState(() => getRoundBackup(roundId))
   const [currentHole, setCurrentHole] = useState(0)
+  const [holeInitialized, setHoleInitialized] = useState(false)
   const [celebration, setCelebration] = useState(null)
   const [note, setNote] = useState('')
   const [showNoteInput, setShowNoteInput] = useState(false)
   const prevScoresRef = { current: {} }
+
+  // 이어하기 진입 시, 입력된 마지막 홀 다음(미입력 홀)으로 자동 이동 (한 번만)
+  useEffect(() => {
+    if (holeInitialized || !round) return
+    const scoredHoles = Object.entries(round.scores || {})
+      .filter(([, s]) => (s.strokes || 0) > 0)
+      .map(([i]) => parseInt(i))
+    const nextHole = scoredHoles.length > 0
+      ? Math.min((round.totalHoles || 18) - 1, Math.max(...scoredHoles) + 1)
+      : 0
+    setCurrentHole(nextHole)
+    setHoleInitialized(true)
+  }, [round, holeInitialized])
 
   useEffect(() => {
     return onValue(ref(db, `rounds/${roundId}`), snap => {
@@ -67,7 +81,8 @@ export default function LiveScore() {
   }
 
   const par = round.holePars?.[currentHole] ?? 4
-  const score = round.scores?.[currentHole] || { strokes: 0, putts: 0 }
+  // 타수 입력은 0이 아닌 파(par)부터 시작 — 골프에서 자연스러운 시작점
+  const score = round.scores?.[currentHole] || { strokes: par, putts: 0 }
   const diff = score.strokes > 0 ? score.strokes - par : null
   const label = diff !== null ? getScoreLabel(diff) : null
   const holesPlayed = Object.values(round.scores || {}).filter(s => s.strokes > 0).length
