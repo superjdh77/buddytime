@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { db } from '../firebase'
-import { ref, onValue, update } from 'firebase/database'
-import { getProfile, saveRoundToHistory, clearActiveRound } from '../utils/auth'
+import { ref, onValue, update, set } from 'firebase/database'
+import { getProfile, saveRoundToHistory, clearActiveRound, saveRoundBackup, getRoundBackup, clearRoundBackup } from '../utils/auth'
 import { getScoreLabel } from '../data/courses'
 import Celebration from '../components/Celebration'
 
@@ -10,7 +10,8 @@ export default function LiveScore() {
   const { roundId } = useParams()
   const navigate = useNavigate()
   const profile = getProfile()
-  const [round, setRound] = useState(null)
+  // 로컬 백업이 있으면 그걸로 즉시 화면을 띄움 (오프라인이어도 바로 이어할 수 있게)
+  const [round, setRound] = useState(() => getRoundBackup(roundId))
   const [currentHole, setCurrentHole] = useState(0)
   const [celebration, setCelebration] = useState(null)
   const [note, setNote] = useState('')
@@ -19,7 +20,19 @@ export default function LiveScore() {
 
   useEffect(() => {
     return onValue(ref(db, `rounds/${roundId}`), snap => {
-      if (!snap.exists()) { clearActiveRound(); navigate('/'); return }
+      if (!snap.exists()) {
+        // 서버에 없음 — 로컬 백업이 있으면 그걸로 계속하고 서버에 복구 시도
+        const backup = getRoundBackup(roundId)
+        if (backup) {
+          setRound(backup)
+          setNote(backup.note || '')
+          set(ref(db, `rounds/${roundId}`), backup).catch(() => {})
+        } else {
+          clearActiveRound()
+          navigate('/')
+        }
+        return
+      }
       const data = snap.val()
 
       // 버디/이글 감지
@@ -36,6 +49,7 @@ export default function LiveScore() {
         })
       }
       setRound(data)
+      saveRoundBackup(data)
       setNote(data.note || '')
     })
   }, [roundId])
@@ -65,17 +79,29 @@ export default function LiveScore() {
   })
   const totalDiff = totalStrokes > 0 ? totalStrokes - totalPar : null
 
-  async function setScore(field, delta) {
+  function setScore(field, delta) {
     const cur = score[field] || 0
     const min = field === 'strokes' ? 1 : 0
     const newVal = Math.max(min, cur + delta)
-    await update(ref(db), {
+
+    // 먼저 화면/로컬 백업을 즉시 갱신 (신호가 약해도 입력이 끊기지 않게)
+    const updated = {
+      ...round,
+      scores: { ...round.scores, [currentHole]: { ...score, [field]: newVal } },
+      currentHole,
+    }
+    setRound(updated)
+    saveRoundBackup(updated)
+
+    update(ref(db), {
       [`rounds/${roundId}/scores/${currentHole}/${field}`]: newVal,
       [`rounds/${roundId}/currentHole`]: currentHole,
+    }).catch(() => {
+      // 서버 전송 실패해도 로컬엔 남아있음 — 다음 입력/재접속 때 재시도됨
     })
   }
 
-  async function finishRound() {
+  function finishRound() {
     if (!confirm('라운드를 종료하고 저장하시겠습니까?')) return
     const now = Date.now()
 
@@ -87,7 +113,13 @@ export default function LiveScore() {
       if (d <= -2) eagles++
     })
 
-    await update(ref(db, `rounds/${roundId}`), {
+    // 로컬 기록 저장은 서버 연결과 무관하게 항상 먼저 처리 (신호 약한 곳에서도 기록이 사라지지 않게)
+    saveRoundToHistory({ ...round, isLive: false, finishedAt: now, birdies, eagles, totalStrokes, totalPar, note })
+    clearActiveRound()
+    clearRoundBackup()
+    navigate('/rounds')
+
+    update(ref(db, `rounds/${roundId}`), {
       isLive: false,
       finishedAt: now,
       note,
@@ -95,10 +127,9 @@ export default function LiveScore() {
       eagles,
       totalStrokes,
       totalPar,
+    }).catch(() => {
+      // 서버 반영이 늦어져도 로컬 기록은 이미 저장됨
     })
-    saveRoundToHistory({ ...round, isLive: false, finishedAt: now, birdies, eagles, totalStrokes, totalPar, note })
-    clearActiveRound()
-    navigate('/rounds')
   }
 
   function shareLink() {
@@ -249,7 +280,12 @@ export default function LiveScore() {
               maxLength={50}
               value={note}
               onChange={e => setNote(e.target.value)}
-              onBlur={() => update(ref(db, `rounds/${roundId}`), { note })}
+              onBlur={() => {
+                const updated = { ...round, note }
+                setRound(updated)
+                saveRoundBackup(updated)
+                update(ref(db, `rounds/${roundId}`), { note }).catch(() => {})
+              }}
               className="w-full bg-[#0D1B3E] text-white rounded-lg px-3 py-2 text-sm outline-none"
             />
           </div>
