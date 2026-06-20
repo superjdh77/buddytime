@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../firebase'
 import { ref, onValue, query, orderByChild, equalTo } from 'firebase/database'
-import { getProfile } from '../utils/auth'
+import { getProfile, getActiveRound, getRoundBackup } from '../utils/auth'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -50,8 +50,15 @@ export default function Home() {
     return new Date(ts).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
   }
 
-  // 내가 진행 중인 라운드 (앱을 나갔다 들어와도 이어할 수 있도록 — Firebase 기준이라 기기를 바꿔도 됨)
-  const myLiveRound = liveRounds.find(r => r.playerName === profile?.name)
+  // 내가 진행 중인 라운드 (앱을 나갔다 들어와도 이어할 수 있도록)
+  // 1차: Firebase에 isLive=true로 남아있는 내 라운드 (기기를 바꿔도 보임)
+  // 2차: 골프장 신호가 약해 서버 동기화가 안 됐을 경우, 이 기기에 남은 로컬 백업으로 대체
+  const myLiveRound = liveRounds.find(r => r.playerName === profile?.name) || (() => {
+    const activeId = getActiveRound()
+    if (!activeId) return null
+    const backup = getRoundBackup(activeId)
+    return backup && backup.isLive ? backup : null
+  })()
 
   function getScoreDiff(round) {
     if (!round.scores) return null
