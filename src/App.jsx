@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { getProfile } from './utils/auth'
+import { getProfile, isSessionConfirmed } from './utils/auth'
 import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
 import StartRound from './pages/StartRound'
@@ -12,7 +12,7 @@ import GroupBoard from './pages/GroupBoard'
 import InstallPrompt from './components/InstallPrompt'
 
 function RequireAuth({ children }) {
-  return getProfile() ? children : <Navigate to="/onboarding" replace />
+  return (getProfile() && isSessionConfirmed()) ? children : <Navigate to="/onboarding" replace />
 }
 
 export default function App() {
