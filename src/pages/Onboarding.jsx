@@ -51,7 +51,8 @@ const COLORS = [
         setMode('signup')
         setStep('name')
       }
-    } catch {
+            } catch (e){
+              console.error('[buddytime] email check error:', e)
       setChecking(false)
       setError('네트워크 확인 후 다시 시도해주세요')
     }
@@ -83,7 +84,8 @@ const COLORS = [
         setSessionConfirmed()
           goAfterLogin()
       }
-    } catch {
+    } catch (e) {
+                  console.error('[buddytime] login error:', e)
       setChecking(false)
       setError('네트워크 확인 후 다시 시도해주세요')
     }
