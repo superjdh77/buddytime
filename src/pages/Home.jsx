@@ -60,6 +60,8 @@ export default function Home() {
     return backup && backup.isLive ? backup : null
   })()
 
+  useEffect(() => { if (myLiveRound?.roomCode) navigate(`/room/${myLiveRound.roomCode}`, { replace: true }) }, [myLiveRound?.roomCode])
+
   function getScoreDiff(round) {
     if (!round.scores) return null
     let strokes = 0, par = 0
