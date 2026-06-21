@@ -133,6 +133,17 @@ export function clearRoundBackup() {
   localStorage.removeItem(ROUND_BACKUP_KEY)
 }
 
+// 세션 확인 여부 (앱을 완전히 닫았다 열면 초기화됨 — sessionStorage)
+const SESSION_CONFIRM_KEY = 'buddytime_session_confirmed'
+
+export function isSessionConfirmed() {
+  try { return sessionStorage.getItem(SESSION_CONFIRM_KEY) === '1' } catch { return false }
+}
+
+export function setSessionConfirmed() {
+  try { sessionStorage.setItem(SESSION_CONFIRM_KEY, '1') } catch {}
+}
+
 // 8자리 고유 ID 생성
 export function generateId() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
