@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { findAccount, registerAccount, loginAccount, getRememberedEmail, getRedirectAfterLogin, clearRedirectAfterLogin } from '../utils/auth'
+import { findAccount, registerAccount, loginAccount, getRememberedEmail, getRedirectAfterLogin, clearRedirectAfterLogin, getProfile, setSessionConfirmed } from '../utils/auth'
 
 const COLORS = [
   '#EF4444', '#3B82F6', '#10B981', '#F59E0B',
   '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16',
 ]
 
-export default function Onboarding() {
+  export default function Onboarding() {
   const navigate = useNavigate()
   const [email, setEmail] = useState(getRememberedEmail())
   const [name, setName] = useState('')
@@ -18,7 +18,19 @@ export default function Onboarding() {
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState('')
 
-  function goAfterLogin() {
+  useEffect(() => {
+    const profile = getProfile()
+      if (profile) {
+        setEmail(profile.email)
+          setName(profile.name)
+            setColor(profile.color)
+              setPin(profile.pin || '')
+                setMode('login')
+                  setStep('pin')
+      }
+  }, [])
+    
+    function goAfterLogin() {
     const redirect = getRedirectAfterLogin()
     if (redirect) { clearRedirectAfterLogin(); navigate(redirect) }
     else navigate('/')
@@ -63,11 +75,13 @@ export default function Onboarding() {
           setPin('')
           return
         }
-        goAfterLogin()
+        setSessionConfirmed()
+          goAfterLogin()
       } else {
         await registerAccount({ email, pin, name, color })
         setChecking(false)
-        goAfterLogin()
+        setSessionConfirmed()
+          goAfterLogin()
       }
     } catch {
       setChecking(false)
