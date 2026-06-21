@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { db } from '../firebase'
 import { ref, onValue, set, update } from 'firebase/database'
-import { getProfile, generateId, setActiveRound, saveRoundBackup, setRedirectAfterLogin } from '../utils/auth'
+import { getProfile, generateId, setActiveRound, saveRoundBackup, setRedirectAfterLogin, isSessionConfirmed } from '../utils/auth'
 
 export default function RoomJoin() {
   const { code } = useParams()
@@ -10,6 +10,7 @@ export default function RoomJoin() {
   const profile = getProfile()
   const [room, setRoom] = useState(undefined) // undefined: 로딩중, null: 없음
   const [joining, setJoining] = useState(false)
+  const [forceChoice, setForceChoice] = useState(false)
 
   useEffect(() => {
     return onValue(ref(db, `rooms/${code}`), snap => {
@@ -17,7 +18,7 @@ export default function RoomJoin() {
     })
   }, [code])
 
-  if (!profile) {
+  if (!profile || !isSessionConfirmed()) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#0D1B3E] px-6 text-center">
         <p className="text-5xl mb-4">⛳</p>
@@ -138,6 +139,23 @@ export default function RoomJoin() {
       </div>
 
       <div className="space-y-3">
+{alreadyPlaying && !forceChoice ? (
+      <>
+      <button
+        onClick={() => navigate(`/live/${alreadyPlaying}`)}
+        className="w-full bg-[#4A9FE0] text-white font-black py-5 rounded-2xl text-lg shadow-lg transition-all active:scale-95"
+          >
+                🏌️ 이어하기
+      </button>  
+        <button
+          onClick={() => setForceChoice(true)}
+          className="w-full text-gray-400 text-sm underline py-2"
+        >
+          선수 / 갤러리 다시 선택
+        </button>
+      </>
+    ) : (
+      <>
         <button
           onClick={joinAsPlayer}
           disabled={joining}
@@ -152,6 +170,8 @@ export default function RoomJoin() {
         >
           👀 갤러리로 구경 {alreadyWatching ? '(이어보기)' : ''}
         </button>
+      </>
+    )}
       </div>
     </div>
   )
