@@ -6,6 +6,46 @@ import { getProfile, saveRoundToHistory, clearActiveRound, saveRoundBackup, getR
 import { getScoreLabel } from '../data/courses'
 import Celebration from '../components/Celebration'
 
+function roomTotalDiff(round) {
+  let strokes = 0, par = 0
+  Object.entries(round?.scores || {}).forEach(([i, s]) => {
+    if (s.strokes > 0) { strokes += s.strokes; par += round.holePars?.[i] ?? 4 }
+  })
+  if (strokes === 0) return null
+  return { strokes, diff: strokes - par }
+}
+
+function MiniScorecard({ round }) {
+  const totalHoles = round.totalHoles || 18
+  return (
+    <div className="space-y-1.5">
+      {[0, 9].map(start => {
+        const holesInRow = Math.min(9, totalHoles - start)
+        if (holesInRow <= 0) return null
+        return (
+          <div key={start} className="grid gap-1" style={{ gridTemplateColumns: `repeat(${holesInRow}, minmax(0, 1fr))` }}>
+            {Array.from({ length: holesInRow }, (_, j) => {
+              const i = start + j
+              const s = round.scores?.[i]
+              const p = round.holePars?.[i] ?? 4
+              const d = s?.strokes > 0 ? s.strokes - p : null
+              const color = d === null ? '#374151' :
+                d <= -2 ? '#E8B84B' : d === -1 ? '#10B981' :
+                d === 0 ? '#fff' : d === 1 ? '#F97316' : '#EF4444'
+              return (
+                <div key={i} className="flex flex-col items-center rounded-lg py-1">
+                  <span className="text-gray-500 text-[10px]">{i+1}</span>
+                  <span className="font-bold text-xs" style={{ color }}>{s?.strokes || '·'}</span>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function LiveScore() {
   const { roundId } = useParams()
   const navigate = useNavigate()
@@ -17,6 +57,8 @@ export default function LiveScore() {
   const [celebration, setCelebration] = useState(null)
   const [note, setNote] = useState('')
   const [showNoteInput, setShowNoteInput] = useState(false)
+  const [room, setRoom] = useState(null)
+  const [roomPlayerRounds, setRoomPlayerRounds] = useState({})
   const prevScoresRef = { current: {} }
 
   // 이어하기 진입 시, 입력된 마지막 홀 다음(미입력 홀)으로 자동 이동 (한 번만)
@@ -67,6 +109,26 @@ export default function LiveScore() {
       setNote(data.note || '')
     })
   }, [roundId])
+
+  // 같은 방(roomCode)이면 방 정보 구독 — 함께 라운드 중인 사람들 표시용
+  useEffect(() => {
+    if (!round?.roomCode) return
+    return onValue(ref(db, `rooms/${round.roomCode}`), snap => {
+      setRoom(snap.exists() ? snap.val() : null)
+    })
+  }, [round?.roomCode])
+
+  const roomPlayersKey = room?.players ? Object.entries(room.players).map(([n, id]) => `${n}:${id}`).join(',') : ''
+
+  useEffect(() => {
+    if (!room?.players) return
+    const unsubs = Object.entries(room.players).map(([name, rid]) =>
+      onValue(ref(db, `rounds/${rid}`), snap => {
+        if (snap.exists()) setRoomPlayerRounds(prev => ({ ...prev, [name]: snap.val() }))
+      })
+    )
+    return () => unsubs.forEach(u => u())
+  }, [roomPlayersKey])
 
   if (!round) return (
     <div className="flex items-center justify-center min-h-screen bg-[#0D1B3E]">
@@ -148,8 +210,12 @@ export default function LiveScore() {
   }
 
   function shareLink() {
-    const url = `${window.location.origin}/watch/${roundId}`
-    const msg = `⛳ ${profile.name}님이 ${round.courseName} 라운드 중!\n실시간 구경하기 👉\n${url}`
+    const url = round.roomCode
+      ? `${window.location.origin}/room/${round.roomCode}`
+      : `${window.location.origin}/watch/${roundId}`
+    const msg = round.roomCode
+      ? `⛳ ${profile.name}님의 ${round.courseName} 라운드 같이 하기!\n선수로 참여하거나 구경하러 오세요 👉\n${url}`
+      : `⛳ ${profile.name}님이 ${round.courseName} 라운드 중!\n실시간 구경하기 👉\n${url}`
     if (navigator.share) navigator.share({ text: msg })
     else { navigator.clipboard?.writeText(msg); alert('링크가 복사되었습니다!\n카카오로 친구들에게 보내세요 😊') }
   }
@@ -347,6 +413,40 @@ export default function LiveScore() {
           </button>
         )}
       </div>
+
+      {/* 함께 라운드 중인 사람들 스코어카드 (방 참여 시) */}
+      {room && Object.keys(room.players || {}).filter(n => n !== profile?.name).length > 0 && (
+        <div className="px-4 pb-4 space-y-3">
+          <p className="text-gray-400 text-xs font-bold px-1">👥 함께 라운드 중</p>
+          {Object.keys(room.players).filter(n => n !== profile?.name).map(name => {
+            const r = roomPlayerRounds[name]
+            if (!r) return (
+              <div key={name} className="bg-[#162449] rounded-2xl p-3">
+                <p className="text-white text-sm font-bold">{name}</p>
+                <p className="text-gray-500 text-xs mt-1">불러오는 중...</p>
+              </div>
+            )
+            const td = roomTotalDiff(r)
+            return (
+              <div key={name} className="bg-[#162449] rounded-2xl p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-white font-black text-xs"
+                      style={{ backgroundColor: r.playerColor }}>{name[0]}</div>
+                    <span className="text-white text-sm font-bold">{name}{name === room.hostName ? ' (방장)' : ''}</span>
+                  </div>
+                  {td && (
+                    <span className={`font-black text-sm ${
+                      td.diff < 0 ? 'text-[#E8B84B]' : td.diff === 0 ? 'text-white' : 'text-red-400'
+                    }`}>{td.diff === 0 ? 'E' : td.diff > 0 ? `+${td.diff}` : td.diff}</span>
+                  )}
+                </div>
+                <MiniScorecard round={r} />
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* 다음 홀 */}
       {currentHole < round.totalHoles - 1 && (
