@@ -170,10 +170,14 @@ export default function LiveScore() {
     setRound(updated)
     saveRoundBackup(updated)
 
-    update(ref(db), {
-      [`rounds/${roundId}/scores/${currentHole}/${field}`]: newVal,
-      [`rounds/${roundId}/currentHole`]: currentHole,
-    }).catch(() => {
+    const fbUpdates = {
+              [`rounds/${roundId}/scores/${currentHole}/${field}`]: newVal,
+              [`rounds/${roundId}/currentHole`]: currentHole,
+    }
+          if (field === 'putts' && !round.scores?.[currentHole]?.strokes) {
+                    fbUpdates[`rounds/${roundId}/scores/${currentHole}/strokes`] = par
+          }
+          update(ref(db), fbUpdates).catch(() => {
       // 서버 전송 실패해도 로컬엔 남아있음 — 다음 입력/재접속 때 재시도됨
     })
   }
