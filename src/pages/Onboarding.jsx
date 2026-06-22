@@ -20,7 +20,7 @@ const COLORS = [
 
   useEffect(() => {
     const profile = getProfile()
-      if (profile) {
+      if (profile && profile.email) {
         setEmail(profile.email)
           setName(profile.name)
             setColor(profile.color)
