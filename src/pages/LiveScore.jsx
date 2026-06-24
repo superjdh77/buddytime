@@ -15,6 +15,12 @@ function roomTotalDiff(round) {
   return { strokes, diff: strokes - par }
 }
 
+function formatDiff(d) {
+  if (d === null) return '·'
+  if (d === 0) return 'E'
+  return d > 0 ? `+${d}` : `${d}`
+}
+
 function MiniScorecard({ round }) {
   const totalHoles = round.totalHoles || 18
   return (
@@ -35,7 +41,7 @@ function MiniScorecard({ round }) {
               return (
                 <div key={i} className="flex flex-col items-center rounded-lg py-1">
                   <span className="text-gray-500 text-[10px]">{i+1}</span>
-                  <span className="font-bold text-xs" style={{ color }}>{s?.strokes || '·'}</span>
+                  <span className="font-bold text-xs" style={{ color }}>{formatDiff(d)}</span>
                 </div>
               )
             })}
@@ -328,7 +334,7 @@ export default function LiveScore() {
                           ${i === currentHole ? 'bg-[#4A9FE0]/30 ring-1 ring-[#4A9FE0]' : ''}`}>
                         <span className="text-gray-500 text-xs">{i+1}</span>
                         <span className="font-bold text-sm" style={{ color }}>
-                          {s?.strokes || '·'}
+                          {formatDiff(d)}
                         </span>
                       </button>
                     )
