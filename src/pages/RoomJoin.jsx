@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { db } from '../firebase'
 import { ref, onValue, set, update } from 'firebase/database'
-import { getProfile, generateId, setActiveRound, saveRoundBackup, setRedirectAfterLogin, isSessionConfirmed } from '../utils/auth'
+import { getProfile, generateId, setActiveRound, saveRoundBackup, getRoundBackup, getActiveRound, setRedirectAfterLogin, isSessionConfirmed } from '../utils/auth'
 
 export default function RoomJoin() {
   const { code } = useParams()
@@ -11,12 +11,20 @@ export default function RoomJoin() {
   const [room, setRoom] = useState(undefined) // undefined: 로딩중, null: 없음
   const [joining, setJoining] = useState(false)
   const [forceChoice, setForceChoice] = useState(false)
+  const [loadTimedOut, setLoadTimedOut] = useState(false)
 
   useEffect(() => {
     return onValue(ref(db, `rooms/${code}`), snap => {
       setRoom(snap.exists() ? snap.val() : null)
     })
   }, [code])
+
+  // 5초 타임아웃 — 신호 약한 골프장에서 무한 스피너 방지
+  useEffect(() => {
+    if (room !== undefined) return
+    const t = setTimeout(() => setLoadTimedOut(true), 5000)
+    return () => clearTimeout(t)
+  }, [room])
 
   if (!profile || !isSessionConfirmed()) {
     return (
@@ -35,6 +43,25 @@ export default function RoomJoin() {
   }
 
   if (room === undefined) {
+    if (loadTimedOut) {
+      const activeId = getActiveRound()
+      const backup = activeId ? getRoundBackup(activeId) : null
+      if (backup && backup.roomCode === code && backup.isLive) {
+        navigate(`/live/${activeId}`, { replace: true })
+        return null
+      }
+      return (
+        <div className="flex items-center justify-center min-h-screen bg-[#0D1B3E]">
+          <div className="text-center px-6">
+            <p className="text-4xl mb-3">📡</p>
+            <p className="text-white font-bold mb-1">신호가 약해서 불러오지 못했어요</p>
+            <p className="text-gray-400 text-sm mb-5">Wi-Fi나 데이터 연결을 확인하고 다시 시도해주세요</p>
+            <button onClick={() => window.location.reload()} className="bg-[#4A9FE0] text-white font-bold px-6 py-3 rounded-xl mr-2">다시 시도</button>
+            <button onClick={() => navigate('/')} className="bg-[#162449] text-gray-300 font-bold px-6 py-3 rounded-xl">홈으로</button>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#0D1B3E]">
         <div className="text-4xl animate-spin">⛳</div>
