@@ -58,6 +58,7 @@ export default function LiveScore() {
   const profile = getProfile()
   // 로컬 백업이 있으면 그걸로 즉시 화면을 띄움 (오프라인이어도 바로 이어할 수 있게)
   const [round, setRound] = useState(() => getRoundBackup(roundId))
+  const [loadTimedOut, setLoadTimedOut] = useState(false)
   const [currentHole, setCurrentHole] = useState(0)
   const [holeInitialized, setHoleInitialized] = useState(false)
   const [celebration, setCelebration] = useState(null)
@@ -136,9 +137,25 @@ export default function LiveScore() {
     return () => unsubs.forEach(u => u())
   }, [roomPlayersKey])
 
+  useEffect(() => {
+    if (round) return
+    const t = setTimeout(() => setLoadTimedOut(true), 6000)
+    return () => clearTimeout(t)
+  }, [round])
+
   if (!round) return (
     <div className="flex items-center justify-center min-h-screen bg-[#0D1B3E]">
-      <div className="text-4xl animate-spin">⛳</div>
+      {loadTimedOut ? (
+        <div className="text-center px-6">
+          <p className="text-4xl mb-3">📡</p>
+          <p className="text-white font-bold mb-1">신호가 약해서 불러오지 못했어요</p>
+          <p className="text-gray-400 text-sm mb-5">Wi-Fi나 데이터 연결을 확인하고 다시 시도해주세요</p>
+          <button onClick={() => window.location.reload()} className="bg-[#4A9FE0] text-white font-bold px-6 py-3 rounded-xl mr-2">다시 시도</button>
+          <button onClick={() => navigate('/')} className="bg-[#162449] text-gray-300 font-bold px-6 py-3 rounded-xl">홈으로</button>
+        </div>
+      ) : (
+        <div className="text-4xl animate-spin">⛳</div>
+      )}
     </div>
   )
 
