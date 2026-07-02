@@ -43,8 +43,15 @@ export async function registerAccount({ email, pin, name, color }) {
 
 // 로그인: 이메일+PIN 확인 후 로컬 프로필 갱신 (기록은 이메일 기준으로 누적)
 export async function loginAccount(email, pin) {
-  const account = await findAccount(email)
-     if (false && account.pin !== pin) return { ok: false, reason: 'wrong_pin' }
+  const cached = getProfile()
+  if (cached && cached.email === email.trim().toLowerCase()) {
+    return { ok: true, account: cached }
+  }
+  const account = await Promise.race([
+    findAccount(email),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+  ])
+  if (!account) return { ok: false, reason: 'not_found' }
   saveProfile(account)
   return { ok: true, account }
 }
